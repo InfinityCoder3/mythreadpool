@@ -258,6 +258,88 @@ int threadpool_add(threadpool_t *pool, void*(*function)(void *), void *arg)
 }
 
 
+int threadpool_destory(threadpool_t *pool)
+{
+    int i;
+    if (pool == NULL)
+        return -1;
+
+    pool->shutdown;
+
+    //destroy manager thread first
+    pthread_join(pool->manager_tid, NULL);
+    printf("---manager thread exit...");
+
+    for (i = 0; i < pool->live_thr; i++) {
+        //notify every free thread, then they would not wait all the time
+        pthread_cond_broadcast(&pool->queue_not_empty);
+    }
+    //destroy every worker thread
+    for (i = 0; i < pool->live_thr; i++) {
+        pthread_join[pool->threads[i], NULL];
+    }
+
+    threadpool_free(pool);
+
+    return 0;
+}
+
+int threadpool_free(threadpool_t *pool)
+{
+    //release resources that created in heap
+    if (pool == NULL)
+        return -1;
+
+    if (pool->task_queue)
+        free(pool->task_queue);
+
+    if (pool->threads) {
+        free(pool->threads);
+        pthread_mutex_lock(&pool->lock);
+        pthread_mutex_destroy(&pool->lock);
+        pthread_mutex_lock(&pool->thread_coounter);
+        pthread_mutex_destroy(&pool->thread_counter);
+        pthread_cond_destroy(&pool->queue_not_full);
+        pthread_cond_destroy(&pool->queue_not_empty);
+    }
+    
+    free(pool);
+    pool = NULL;
+
+    return 0;
+}
+
+int threadpool_all_threadnum(threadpool_t *pool)
+{
+    int all_threadnum = -1;
+    
+    pthread_mutex_lock(&pool->lock);
+    all_threadnum = pool->live_thr;
+    pthread_mutex_unlock(&pool->lock);
+
+    return all_threadnum;
+}
+
+int threadpool_busy_threadnum(threadpool_t *pool)
+{
+    int busy_threadnum = -1;
+
+    pthread_mutex_lock(&pool->lock);
+    busy_threadnum = pool->busy_thr;
+    pthread_mutex_unlock(&pool->lock);
+
+    return busy_threadnum;
+}
+
+int is_thread_alive(pthread_t tid) 
+{
+    int kill_rc = thread_kill(tid, 0);  //send signale 0, to checkout the thread ia alive or not
+    if (kiil_rc == ESRCH) {
+        return false;   //no such process
+    }
+    return true;
+}
+
 void *process(void *arg)
 {
     printf("thread 0x%x working on task %d\n", (unsigned int)pthread_self(), *(int *)arg);
